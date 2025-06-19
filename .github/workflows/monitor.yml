@@ -268,6 +268,7 @@ jobs:
           curl -H "Content-Type: application/json" \
                -X POST \
                -d '{
+                 "content": "@everyone",
                  "embeds": [{
                    "title": "🎯 New Product Management Internships",
                    "description": "'"$DESCRIPTION"'",
@@ -309,6 +310,7 @@ jobs:
           curl -H "Content-Type: application/json" \
                -X POST \
                -d '{
+                 "content": "@everyone",
                  "embeds": [{
                    "title": "💼 New Summer 2026 Internships",
                    "description": "'"$DESCRIPTION"'",

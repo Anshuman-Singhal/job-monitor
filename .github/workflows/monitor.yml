@@ -2,8 +2,9 @@ name: Monitor Job Repositories
 
 on:
   schedule:
+    # Run every 5 minutes
     - cron: '*/5 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
   monitor-repos:
@@ -78,171 +79,56 @@ jobs:
               # Extract added lines from README
               PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
               
-              # Debug: Show what we got
-              echo "=== PATCH CONTENT ==="
-              echo "$PATCH" | head -20
-              echo "===================="
-              
               if [ -n "$PATCH" ]; then
                 # Extract new job listings (lines starting with + that contain table rows)
                 # Store in a temporary file to preserve formatting
                 echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_listings.txt
                 
-                # Debug: Show extracted lines
-                echo "=== EXTRACTED LINES ==="
-                cat /tmp/new_listings.txt
-                echo "====================="
-                
                 # Format listings for Discord
                 LISTINGS=""
-                LISTING_COUNT=0
                 while IFS= read -r line; do
-                  # Skip header and separator lines
-                  if echo "$line" | grep -qE '(^\| *Company|^\|[-:]|^\| *\*\*Company)'; then
-                    continue
-                  fi
-                  
                   # Parse table row - assuming format: | Company | Role | Location | Link | Date |
                   if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                    # Debug each field
-                    echo "Processing line: $line"
-                    
-                    COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
-                    ROLE=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
-                    LOCATION=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
-                    LINK=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
-                    DATE=$(echo "$line" | cut -d'|' -f6 | sed 's/^ *//;s/ *$//')
-                    
-                    echo "Company: '$COMPANY', Role: '$ROLE', Location: '$LOCATION'"
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
+                    LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
+                    LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
+                    DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
                     
                     # Extract URL from markdown link if present
-                    URL=""
-                    if echo "$LINK" | grep -qE '\[.*\]\(.*\)'; then
-                      URL=$(echo "$LINK" | sed -n 's/.*](\([^)]*\)).*/\1/p')
+                    if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
+                      URL=$(echo "$LINK" | sed -n 's/.*](\(.*\)).*/\1/p')
+                      LINK_TEXT=$(echo "$LINK" | sed -n 's/\[\(.*\)\].*/\1/p')
+                    else
+                      URL=""
+                      LINK_TEXT="$LINK"
                     fi
                     
-                    if [ -n "$COMPANY" ] && [ -n "$ROLE" ]; then
-                      LISTING_COUNT=$((LISTING_COUNT + 1))
-                      LISTING_ENTRY="**$COMPANY** - $ROLE"
-                      if [ -n "$LOCATION" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n📍 $LOCATION"
-                      fi
+                    if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ]; then
+                      LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
                       if [ -n "$URL" ]; then
                         LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
-                      elif [ -n "$LINK" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n🔗 $LINK"
                       fi
-                      if [ -n "$DATE" ] && [ "$DATE" != "Date Posted" ] && [ "$DATE" != "Date Added" ]; then
+                      if [ -n "$DATE" ] && [ "$DATE" != "Date Posted" ]; then
                         LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
                       fi
-                      
-                      if [ $LISTING_COUNT -eq 1 ]; then
-                        LISTINGS="$LISTING_ENTRY"
-                      else
-                        LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
-                      fi
+                      LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
                     fi
                   fi
                 done < /tmp/new_listings.txt
                 
-                echo "Total listings found: $LISTING_COUNT"
-                
-                if [ -n "$LISTINGS" ] && [ $LISTING_COUNT -gt 0 ]; then
+                if [ -n "$LISTINGS" ]; then
                   echo "listings<<EOF" >> $GITHUB_OUTPUT
-                  echo -e "**New Job Postings Added:**\n\n$LISTINGS" >> $GITHUB_OUTPUT
+                  echo -e "$LISTINGS" >> $GITHUB_OUTPUT
                   echo "EOF" >> $GITHUB_OUTPUT
                 else
-                  # Fallback: Try to extract from commit message
-                  if echo "$COMMIT_MSG" | grep -qi "added.*listing"; then
-                    # Extract company and role from commit message
-                    EXTRACTED_INFO=$(echo "$COMMIT_MSG" | sed -n 's/.*: \(.*\) at \(.*\)/\2 - \1/p')
-                    if [ -n "$EXTRACTED_INFO" ]; then
-                      echo "listings<<EOF" >> $GITHUB_OUTPUT
-                      echo -e "**New Listing Added:**\n\n**$EXTRACTED_INFO**\n\n_Full details available in repository_" >> $GITHUB_OUTPUT
-                      echo "EOF" >> $GITHUB_OUTPUT
-                    else
-                      echo "listings=Update detected but could not extract listing details" >> $GITHUB_OUTPUT
-                    fi
-                  else
-                    echo "listings=Update: $COMMIT_MSG" >> $GITHUB_OUTPUT
-                  fi
+                  echo "listings=No specific listings extracted" >> $GITHUB_OUTPUT
                 fi
               else
                 echo "listings=No README changes detected" >> $GITHUB_OUTPUT
               fi
             else
-              # Initial run - fetch current README and show last 5 entries
-              echo "Initial tracking - fetching recent listings..."
-              
-              # Fetch the current README
-              README_URL="https://api.github.com/repos/$REPO/contents/README.md"
-              README_RESPONSE=$(curl -s "$README_URL")
-              
-              # Debug API response
-              echo "=== README API RESPONSE ==="
-              echo "$README_RESPONSE" | jq -r '.message // "Success"'
-              echo "========================="
-              
-              README_CONTENT=$(echo "$README_RESPONSE" | jq -r '.content // empty' | base64 -d)
-              
-              if [ -n "$README_CONTENT" ]; then
-                # Find table section and extract recent entries
-                echo "=== SEARCHING FOR TABLE ==="
-                echo "$README_CONTENT" | grep -E '^\|.*\|.*\|.*\|' | head -10
-                echo "========================="
-                
-                # Extract the last 5 table rows (most recent additions)
-                echo "$README_CONTENT" | grep -E '^\|[^|]+\|[^|]+\|[^|]+\|' | grep -v '^\| *Company' | grep -v '^\| *\*\*Company' | grep -v '^\|[-:]' | tail -5 > /tmp/recent_listings.txt
-                
-                LISTINGS=""
-                LISTING_COUNT=0
-                while IFS= read -r line; do
-                  # Parse table row
-                  if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                    COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
-                    ROLE=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
-                    LOCATION=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
-                    LINK=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
-                    DATE=$(echo "$line" | cut -d'|' -f6 | sed 's/^ *//;s/ *$//')
-                    
-                    # Extract URL from markdown link if present
-                    URL=""
-                    if echo "$LINK" | grep -qE '\[.*\]\(.*\)'; then
-                      URL=$(echo "$LINK" | sed -n 's/.*](\([^)]*\)).*/\1/p')
-                    fi
-                    
-                    if [ -n "$COMPANY" ] && [ -n "$ROLE" ]; then
-                      LISTING_COUNT=$((LISTING_COUNT + 1))
-                      LISTING_ENTRY="**$COMPANY** - $ROLE"
-                      if [ -n "$LOCATION" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n📍 $LOCATION"
-                      fi
-                      if [ -n "$URL" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
-                      fi
-                      if [ -n "$DATE" ] && [ "$DATE" != "Date Posted" ] && [ "$DATE" != "Date Added" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
-                      fi
-                      
-                      if [ $LISTING_COUNT -eq 1 ]; then
-                        LISTINGS="$LISTING_ENTRY"
-                      else
-                        LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
-                      fi
-                    fi
-                  fi
-                done < /tmp/recent_listings.txt
-                
-                if [ -n "$LISTINGS" ] && [ $LISTING_COUNT -gt 0 ]; then
-                  echo "listings<<EOF" >> $GITHUB_OUTPUT
-                  echo -e "**Recent Listings (Last $LISTING_COUNT):**\n\n$LISTINGS" >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                else
-                  echo "listings=Initial scan - unable to parse table format" >> $GITHUB_OUTPUT
-                fi
-              else
-                echo "listings=Could not fetch README content" >> $GITHUB_OUTPUT
-              fi
+              echo "listings=Initial tracking - no previous commit to compare" >> $GITHUB_OUTPUT
             fi
             
             # Save new SHA
@@ -350,79 +236,13 @@ jobs:
                   echo -e "$LISTINGS" >> $GITHUB_OUTPUT
                   echo "EOF" >> $GITHUB_OUTPUT
                 else
-                  # Fallback: Try to extract from commit message
-                  if echo "$COMMIT_MSG" | grep -qi "added.*listing"; then
-                    # Extract company and role from commit message
-                    EXTRACTED_INFO=$(echo "$COMMIT_MSG" | sed -n 's/.*: \(.*\) at \(.*\)/\2 - \1/p')
-                    if [ -n "$EXTRACTED_INFO" ]; then
-                      echo "listings<<EOF" >> $GITHUB_OUTPUT
-                      echo -e "**New Listing Added:**\n\n**$EXTRACTED_INFO**\n\n_Full details available in repository_" >> $GITHUB_OUTPUT
-                      echo "EOF" >> $GITHUB_OUTPUT
-                    else
-                      echo "listings=Update detected but could not extract listing details" >> $GITHUB_OUTPUT
-                    fi
-                  else
-                    echo "listings=Update: $COMMIT_MSG" >> $GITHUB_OUTPUT
-                  fi
+                  echo "listings=No specific listings extracted" >> $GITHUB_OUTPUT
                 fi
               else
                 echo "listings=No README changes detected" >> $GITHUB_OUTPUT
               fi
             else
-              # Initial run - fetch current README and show last 5 entries
-              echo "Initial tracking - fetching recent listings..."
-              
-              # Fetch the current README
-              README_URL="https://api.github.com/repos/$REPO/contents/README.md"
-              README_RESPONSE=$(curl -s "$README_URL")
-              README_CONTENT=$(echo "$README_RESPONSE" | jq -r '.content // empty' | base64 -d)
-              
-              if [ -n "$README_CONTENT" ]; then
-                # Extract the last 5 table rows (most recent additions)
-                echo "$README_CONTENT" | grep -E '^\|[^|]+\|[^|]+\|[^|]+\|' | grep -v '^\| *Company' | grep -v '^\|[-:]' | tail -5 > /tmp/recent_listings_vansh.txt
-                
-                LISTINGS=""
-                while IFS= read -r line; do
-                  # Parse table row
-                  if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
-                    ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
-                    LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
-                    LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
-                    DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
-                    
-                    # Extract URL from markdown link if present
-                    if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
-                      URL=$(echo "$LINK" | sed -n 's/.*](\(.*\)).*/\1/p')
-                      LINK_TEXT=$(echo "$LINK" | sed -n 's/\[\(.*\)\].*/\1/p')
-                    else
-                      URL=""
-                      LINK_TEXT="$LINK"
-                    fi
-                    
-                    if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ]; then
-                      LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
-                      if [ -n "$URL" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
-                      fi
-                      if [ -n "$DATE" ] && [ "$DATE" != "Date Added" ]; then
-                        LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
-                      fi
-                      LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
-                    fi
-                  fi
-                done < /tmp/recent_listings_vansh.txt
-                
-                if [ -n "$LISTINGS" ]; then
-                  echo "listings<<EOF" >> $GITHUB_OUTPUT
-                  echo -e "**Recent Listings (Last 5):**$LISTINGS" >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                else
-                  echo "listings=Could not extract recent listings" >> $GITHUB_OUTPUT
-                fi
-              else
-                echo "listings=Could not fetch README content" >> $GITHUB_OUTPUT
-              fi
+              echo "listings=Initial tracking - no previous commit to compare" >> $GITHUB_OUTPUT
             fi
             
             # Save new SHA
@@ -437,12 +257,12 @@ jobs:
           LISTINGS: ${{ steps.check-jobright.outputs.listings }}
         run: |
           # Prepare the Discord message with extracted listings
-          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Could not extract recent listings" ] && [ "$LISTINGS" != "Could not fetch README content" ]; then
+          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Initial tracking - no previous commit to compare" ]; then
             # Convert newlines for JSON
             FORMATTED_LISTINGS=$(echo "$LISTINGS" | sed ':a;N;$!ba;s/\n/\\n/g')
-            DESCRIPTION="$FORMATTED_LISTINGS"
+            DESCRIPTION="**New Job Postings Added:**\\n$FORMATTED_LISTINGS"
           else
-            DESCRIPTION="**Update:** ${{ steps.check-jobright.outputs.commit_message }}\\n\\n*Unable to extract detailed listings*"
+            DESCRIPTION="**Update:** ${{ steps.check-jobright.outputs.commit_message }}\\n\\n*$LISTINGS*"
           fi
           
           curl -H "Content-Type: application/json" \
@@ -478,12 +298,12 @@ jobs:
           LISTINGS: ${{ steps.check-vansh.outputs.listings }}
         run: |
           # Prepare the Discord message with extracted listings
-          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Could not extract recent listings" ] && [ "$LISTINGS" != "Could not fetch README content" ]; then
+          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Initial tracking - no previous commit to compare" ]; then
             # Convert newlines for JSON
             FORMATTED_LISTINGS=$(echo "$LISTINGS" | sed ':a;N;$!ba;s/\n/\\n/g')
-            DESCRIPTION="$FORMATTED_LISTINGS"
+            DESCRIPTION="**New Job Postings Added:**\\n$FORMATTED_LISTINGS"
           else
-            DESCRIPTION="**Update:** ${{ steps.check-vansh.outputs.commit_message }}\\n\\n*Unable to extract detailed listings*"
+            DESCRIPTION="**Update:** ${{ steps.check-vansh.outputs.commit_message }}\\n\\n*$LISTINGS*"
           fi
           
           curl -H "Content-Type: application/json" \

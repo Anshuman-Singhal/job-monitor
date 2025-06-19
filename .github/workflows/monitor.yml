@@ -2,8 +2,8 @@ name: Monitor Job Repositories
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
+    # Run every 3 minutes
+    - cron: '*/3 * * * *'
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
@@ -24,18 +24,20 @@ jobs:
       
       - name: Check JobRight AI Repository
         id: check-jobright
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="jobright-ai/2025-Product-Management-Internship"
           LAST_SHA_FILE=".tracking/jobright-ai.sha"
           
           # First, get the default branch
-          REPO_INFO=$(curl -s "https://api.github.com/repos/$REPO")
+          REPO_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO")
           DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "main"')
           
           echo "Default branch: $DEFAULT_BRANCH"
           
           # Get current SHA using the default branch
-          API_RESPONSE=$(curl -s "https://api.github.com/repos/$REPO/commits?sha=$DEFAULT_BRANCH&per_page=1")
+          API_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/commits?sha=$DEFAULT_BRANCH&per_page=1")
           
           # Check if response is an array (success) or object (error)
           if echo "$API_RESPONSE" | jq -e 'type == "array"' > /dev/null 2>&1; then
@@ -47,7 +49,7 @@ jobs:
             echo "Attempting alternative method..."
             
             # Try alternative endpoint
-            ALT_RESPONSE=$(curl -s "https://api.github.com/repos/$REPO/branches/$DEFAULT_BRANCH")
+            ALT_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/branches/$DEFAULT_BRANCH")
             CURRENT_SHA=$(echo "$ALT_RESPONSE" | jq -r '.commit.sha // empty')
             COMMIT_MSG=$(echo "$ALT_RESPONSE" | jq -r '.commit.commit.message // "No message"' | head -n 1)
           fi
@@ -74,7 +76,7 @@ jobs:
             # Get the diff between commits to extract new listings
             if [ -n "$LAST_SHA" ]; then
               DIFF_URL="https://api.github.com/repos/$REPO/compare/$LAST_SHA...$CURRENT_SHA"
-              DIFF_RESPONSE=$(curl -s "$DIFF_URL")
+              DIFF_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$DIFF_URL")
               
               # Extract added lines from README
               PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
@@ -139,18 +141,20 @@ jobs:
       
       - name: Check VanshB03 Repository
         id: check-vansh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REPO="vanshb03/Summer2026-Internships"
           LAST_SHA_FILE=".tracking/vanshb03.sha"
           
           # First, get the default branch
-          REPO_INFO=$(curl -s "https://api.github.com/repos/$REPO")
+          REPO_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO")
           DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "main"')
           
           echo "Default branch: $DEFAULT_BRANCH"
           
           # Get current SHA using the default branch
-          API_RESPONSE=$(curl -s "https://api.github.com/repos/$REPO/commits?sha=$DEFAULT_BRANCH&per_page=1")
+          API_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/commits?sha=$DEFAULT_BRANCH&per_page=1")
           
           # Check if response is an array (success) or object (error)
           if echo "$API_RESPONSE" | jq -e 'type == "array"' > /dev/null 2>&1; then
@@ -162,7 +166,7 @@ jobs:
             echo "Attempting alternative method..."
             
             # Try alternative endpoint
-            ALT_RESPONSE=$(curl -s "https://api.github.com/repos/$REPO/branches/$DEFAULT_BRANCH")
+            ALT_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/branches/$DEFAULT_BRANCH")
             CURRENT_SHA=$(echo "$ALT_RESPONSE" | jq -r '.commit.sha // empty')
             COMMIT_MSG=$(echo "$ALT_RESPONSE" | jq -r '.commit.commit.message // "No message"' | head -n 1)
           fi
@@ -189,7 +193,7 @@ jobs:
             # Get the diff between commits to extract new listings
             if [ -n "$LAST_SHA" ]; then
               DIFF_URL="https://api.github.com/repos/$REPO/compare/$LAST_SHA...$CURRENT_SHA"
-              DIFF_RESPONSE=$(curl -s "$DIFF_URL")
+              DIFF_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$DIFF_URL")
               
               # Extract added lines from README
               PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')

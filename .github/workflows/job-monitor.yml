@@ -2,9 +2,8 @@ name: Monitor Job Repositories
 
 on:
   schedule:
-    # Run every 5 minutes (more reliable than */3)
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Allow manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   monitor-repos:

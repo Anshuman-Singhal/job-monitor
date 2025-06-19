@@ -29,7 +29,7 @@ jobs:
           LAST_SHA_FILE=".tracking/jobright-ai.sha"
           
           # Get current SHA
-          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits/main" | jq -r '.sha // empty')
+          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits?sha=main&per_page=1" | jq -r '.[0].sha // empty')
           
           if [ -z "$CURRENT_SHA" ]; then
             echo "Failed to fetch current SHA"
@@ -48,7 +48,7 @@ jobs:
             echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
             
             # Get commit message
-            COMMIT_MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$CURRENT_SHA" | jq -r '.commit.message // "No message"' | head -n 1)
+            COMMIT_MSG=$(curl -s "https://api.github.com/repos/$REPO/commits?sha=main&per_page=1" | jq -r '.[0].commit.message // "No message"' | head -n 1)
             echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
             
             # Save new SHA
@@ -64,7 +64,7 @@ jobs:
           LAST_SHA_FILE=".tracking/vanshb03.sha"
           
           # Get current SHA
-          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits/main" | jq -r '.sha // empty')
+          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits?sha=main&per_page=1" | jq -r '.[0].sha // empty')
           
           if [ -z "$CURRENT_SHA" ]; then
             echo "Failed to fetch current SHA"

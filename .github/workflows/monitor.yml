@@ -68,6 +68,68 @@ jobs:
             echo "repo_name=JobRight AI - Product Management Internship" >> $GITHUB_OUTPUT
             echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
             echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "current_sha=$CURRENT_SHA" >> $GITHUB_OUTPUT
+            echo "last_sha=$LAST_SHA" >> $GITHUB_OUTPUT
+            
+            # Get the diff between commits to extract new listings
+            if [ -n "$LAST_SHA" ]; then
+              DIFF_URL="https://api.github.com/repos/$REPO/compare/$LAST_SHA...$CURRENT_SHA"
+              DIFF_RESPONSE=$(curl -s "$DIFF_URL")
+              
+              # Extract added lines from README
+              PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
+              
+              if [ -n "$PATCH" ]; then
+                # Extract new job listings (lines starting with + that contain table rows)
+                # Store in a temporary file to preserve formatting
+                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_listings.txt
+                
+                # Format listings for Discord
+                LISTINGS=""
+                while IFS= read -r line; do
+                  # Parse table row - assuming format: | Company | Role | Location | Link | Date |
+                  if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
+                    LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
+                    LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
+                    DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
+                    
+                    # Extract URL from markdown link if present
+                    if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
+                      URL=$(echo "$LINK" | sed -n 's/.*](\(.*\)).*/\1/p')
+                      LINK_TEXT=$(echo "$LINK" | sed -n 's/\[\(.*\)\].*/\1/p')
+                    else
+                      URL=""
+                      LINK_TEXT="$LINK"
+                    fi
+                    
+                    if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ]; then
+                      LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
+                      if [ -n "$URL" ]; then
+                        LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
+                      fi
+                      if [ -n "$DATE" ] && [ "$DATE" != "Date Posted" ]; then
+                        LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
+                      fi
+                      LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
+                    fi
+                  fi
+                done < /tmp/new_listings.txt
+                
+                if [ -n "$LISTINGS" ]; then
+                  echo "listings<<EOF" >> $GITHUB_OUTPUT
+                  echo -e "$LISTINGS" >> $GITHUB_OUTPUT
+                  echo "EOF" >> $GITHUB_OUTPUT
+                else
+                  echo "listings=No specific listings extracted" >> $GITHUB_OUTPUT
+                fi
+              else
+                echo "listings=No README changes detected" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "listings=Initial tracking - no previous commit to compare" >> $GITHUB_OUTPUT
+            fi
             
             # Save new SHA
             echo "$CURRENT_SHA" > "$LAST_SHA_FILE"
@@ -121,6 +183,67 @@ jobs:
             echo "repo_name=VanshB03 - Summer 2026 Internships" >> $GITHUB_OUTPUT
             echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
             echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "current_sha=$CURRENT_SHA" >> $GITHUB_OUTPUT
+            echo "last_sha=$LAST_SHA" >> $GITHUB_OUTPUT
+            
+            # Get the diff between commits to extract new listings
+            if [ -n "$LAST_SHA" ]; then
+              DIFF_URL="https://api.github.com/repos/$REPO/compare/$LAST_SHA...$CURRENT_SHA"
+              DIFF_RESPONSE=$(curl -s "$DIFF_URL")
+              
+              # Extract added lines from README
+              PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
+              
+              if [ -n "$PATCH" ]; then
+                # Extract new job listings (lines starting with + that contain table rows)
+                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_listings_vansh.txt
+                
+                # Format listings for Discord
+                LISTINGS=""
+                while IFS= read -r line; do
+                  # Parse table row - format may vary
+                  if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
+                    LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
+                    LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
+                    DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
+                    
+                    # Extract URL from markdown link if present
+                    if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
+                      URL=$(echo "$LINK" | sed -n 's/.*](\(.*\)).*/\1/p')
+                      LINK_TEXT=$(echo "$LINK" | sed -n 's/\[\(.*\)\].*/\1/p')
+                    else
+                      URL=""
+                      LINK_TEXT="$LINK"
+                    fi
+                    
+                    if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ]; then
+                      LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
+                      if [ -n "$URL" ]; then
+                        LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
+                      fi
+                      if [ -n "$DATE" ] && [ "$DATE" != "Date Added" ]; then
+                        LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
+                      fi
+                      LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
+                    fi
+                  fi
+                done < /tmp/new_listings_vansh.txt
+                
+                if [ -n "$LISTINGS" ]; then
+                  echo "listings<<EOF" >> $GITHUB_OUTPUT
+                  echo -e "$LISTINGS" >> $GITHUB_OUTPUT
+                  echo "EOF" >> $GITHUB_OUTPUT
+                else
+                  echo "listings=No specific listings extracted" >> $GITHUB_OUTPUT
+                fi
+              else
+                echo "listings=No README changes detected" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "listings=Initial tracking - no previous commit to compare" >> $GITHUB_OUTPUT
+            fi
             
             # Save new SHA
             echo "$CURRENT_SHA" > "$LAST_SHA_FILE"
@@ -130,26 +253,40 @@ jobs:
       
       - name: Send Discord Notification for JobRight
         if: steps.check-jobright.outputs.changed == 'true'
+        env:
+          LISTINGS: ${{ steps.check-jobright.outputs.listings }}
         run: |
+          # Prepare the Discord message with extracted listings
+          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Initial tracking - no previous commit to compare" ]; then
+            # Convert newlines for JSON
+            FORMATTED_LISTINGS=$(echo "$LISTINGS" | sed ':a;N;$!ba;s/\n/\\n/g')
+            DESCRIPTION="**New Job Postings Added:**\\n$FORMATTED_LISTINGS"
+          else
+            DESCRIPTION="**Update:** ${{ steps.check-jobright.outputs.commit_message }}\\n\\n*$LISTINGS*"
+          fi
+          
           curl -H "Content-Type: application/json" \
                -X POST \
                -d '{
                  "embeds": [{
-                   "title": "📋 Repository Update Detected",
-                   "description": "**${{ steps.check-jobright.outputs.repo_name }}**",
+                   "title": "🎯 New Product Management Internships",
+                   "description": "'"$DESCRIPTION"'",
                    "color": 5814783,
                    "fields": [
                      {
-                       "name": "Latest Change",
-                       "value": "${{ steps.check-jobright.outputs.commit_message }}",
-                       "inline": false
+                       "name": "📚 Repository",
+                       "value": "[View All Listings](${{ steps.check-jobright.outputs.repo_url }})",
+                       "inline": true
                      },
                      {
-                       "name": "Repository Link",
-                       "value": "[View Repository](${{ steps.check-jobright.outputs.repo_url }})",
+                       "name": "💬 Commit",
+                       "value": "${{ steps.check-jobright.outputs.commit_message }}",
                        "inline": true
                      }
                    ],
+                   "footer": {
+                     "text": "JobRight AI • Product Management Internships"
+                   },
                    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
                  }]
                }' \
@@ -157,26 +294,40 @@ jobs:
       
       - name: Send Discord Notification for VanshB03
         if: steps.check-vansh.outputs.changed == 'true'
+        env:
+          LISTINGS: ${{ steps.check-vansh.outputs.listings }}
         run: |
+          # Prepare the Discord message with extracted listings
+          if [ "$LISTINGS" != "No specific listings extracted" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Initial tracking - no previous commit to compare" ]; then
+            # Convert newlines for JSON
+            FORMATTED_LISTINGS=$(echo "$LISTINGS" | sed ':a;N;$!ba;s/\n/\\n/g')
+            DESCRIPTION="**New Job Postings Added:**\\n$FORMATTED_LISTINGS"
+          else
+            DESCRIPTION="**Update:** ${{ steps.check-vansh.outputs.commit_message }}\\n\\n*$LISTINGS*"
+          fi
+          
           curl -H "Content-Type: application/json" \
                -X POST \
                -d '{
                  "embeds": [{
-                   "title": "📋 Repository Update Detected",
-                   "description": "**${{ steps.check-vansh.outputs.repo_name }}**",
-                   "color": 5814783,
+                   "title": "💼 New Summer 2026 Internships",
+                   "description": "'"$DESCRIPTION"'",
+                   "color": 3447003,
                    "fields": [
                      {
-                       "name": "Latest Change",
-                       "value": "${{ steps.check-vansh.outputs.commit_message }}",
-                       "inline": false
+                       "name": "📚 Repository",
+                       "value": "[View All Listings](${{ steps.check-vansh.outputs.repo_url }})",
+                       "inline": true
                      },
                      {
-                       "name": "Repository Link",
-                       "value": "[View Repository](${{ steps.check-vansh.outputs.repo_url }})",
+                       "name": "💬 Commit",
+                       "value": "${{ steps.check-vansh.outputs.commit_message }}",
                        "inline": true
                      }
                    ],
+                   "footer": {
+                     "text": "Summer 2026 Internships Tracker"
+                   },
                    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
                  }]
                }' \

@@ -1,0 +1,156 @@
+name: Monitor Job Repositories
+
+on:
+  schedule:
+    # Run every 3 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  monitor-repos:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up tracking directory
+        run: |
+          mkdir -p .tracking
+          touch .tracking/jobright-ai.sha
+          touch .tracking/vanshb03.sha
+      
+      - name: Check JobRight AI Repository
+        id: check-jobright
+        run: |
+          REPO="jobright-ai/2025-Product-Management-Internship"
+          LAST_SHA_FILE=".tracking/jobright-ai.sha"
+          
+          # Get current SHA
+          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits/main" | jq -r '.sha // empty')
+          
+          if [ -z "$CURRENT_SHA" ]; then
+            echo "Failed to fetch current SHA"
+            exit 1
+          fi
+          
+          # Read last known SHA
+          LAST_SHA=$(cat "$LAST_SHA_FILE" 2>/dev/null || echo "")
+          
+          echo "Current SHA: $CURRENT_SHA"
+          echo "Last SHA: $LAST_SHA"
+          
+          if [ "$CURRENT_SHA" != "$LAST_SHA" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "repo_name=JobRight AI - Product Management Internship" >> $GITHUB_OUTPUT
+            echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
+            
+            # Get commit message
+            COMMIT_MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$CURRENT_SHA" | jq -r '.commit.message // "No message"' | head -n 1)
+            echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            
+            # Save new SHA
+            echo "$CURRENT_SHA" > "$LAST_SHA_FILE"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check VanshB03 Repository
+        id: check-vansh
+        run: |
+          REPO="vanshb03/Summer2026-Internships"
+          LAST_SHA_FILE=".tracking/vanshb03.sha"
+          
+          # Get current SHA
+          CURRENT_SHA=$(curl -s "https://api.github.com/repos/$REPO/commits/main" | jq -r '.sha // empty')
+          
+          if [ -z "$CURRENT_SHA" ]; then
+            echo "Failed to fetch current SHA"
+            exit 1
+          fi
+          
+          # Read last known SHA
+          LAST_SHA=$(cat "$LAST_SHA_FILE" 2>/dev/null || echo "")
+          
+          echo "Current SHA: $CURRENT_SHA"
+          echo "Last SHA: $LAST_SHA"
+          
+          if [ "$CURRENT_SHA" != "$LAST_SHA" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "repo_name=VanshB03 - Summer 2026 Internships" >> $GITHUB_OUTPUT
+            echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
+            
+            # Get commit message
+            COMMIT_MSG=$(curl -s "https://api.github.com/repos/$REPO/commits/$CURRENT_SHA" | jq -r '.commit.message // "No message"' | head -n 1)
+            echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            
+            # Save new SHA
+            echo "$CURRENT_SHA" > "$LAST_SHA_FILE"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Send Discord Notification for JobRight
+        if: steps.check-jobright.outputs.changed == 'true'
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d '{
+                 "embeds": [{
+                   "title": "📋 Repository Update Detected",
+                   "description": "**${{ steps.check-jobright.outputs.repo_name }}**",
+                   "color": 5814783,
+                   "fields": [
+                     {
+                       "name": "Latest Change",
+                       "value": "${{ steps.check-jobright.outputs.commit_message }}",
+                       "inline": false
+                     },
+                     {
+                       "name": "Repository Link",
+                       "value": "[View Repository](${{ steps.check-jobright.outputs.repo_url }})",
+                       "inline": true
+                     }
+                   ],
+                   "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+                 }]
+               }' \
+               "${{ secrets.DISCORD_WEBHOOK_URL }}"
+      
+      - name: Send Discord Notification for VanshB03
+        if: steps.check-vansh.outputs.changed == 'true'
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d '{
+                 "embeds": [{
+                   "title": "📋 Repository Update Detected",
+                   "description": "**${{ steps.check-vansh.outputs.repo_name }}**",
+                   "color": 5814783,
+                   "fields": [
+                     {
+                       "name": "Latest Change",
+                       "value": "${{ steps.check-vansh.outputs.commit_message }}",
+                       "inline": false
+                     },
+                     {
+                       "name": "Repository Link",
+                       "value": "[View Repository](${{ steps.check-vansh.outputs.repo_url }})",
+                       "inline": true
+                     }
+                   ],
+                   "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+                 }]
+               }' \
+               "${{ secrets.DISCORD_WEBHOOK_URL }}"
+      
+      - name: Commit tracking files
+        if: steps.check-jobright.outputs.changed == 'true' || steps.check-vansh.outputs.changed == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .tracking/
+          git commit -m "Update tracking SHA files" || echo "No changes to commit"
+          git push || echo "No changes to push"

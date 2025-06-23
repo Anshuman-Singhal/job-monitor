@@ -169,8 +169,20 @@ jobs:
             echo "[]" > "$TRACKING_FILE"
           fi
           
+          # Validate and fix tracking file if corrupted
+          if ! jq empty "$TRACKING_FILE" 2>/dev/null; then
+            echo "Tracking file corrupted, reinitializing..."
+            echo "[]" > "$TRACKING_FILE"
+          fi
+          
           # Get list of open issues
           ISSUES_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/issues?state=open&per_page=100")
+          
+          # Validate API response
+          if ! echo "$ISSUES_RESPONSE" | jq empty 2>/dev/null; then
+            echo "Invalid API response"
+            exit 1
+          fi
           
           # Read previously tracked issues
           TRACKED_ISSUES=$(cat "$TRACKING_FILE")
@@ -191,12 +203,16 @@ jobs:
             
             # Format new issues for Discord
             FORMATTED_ISSUES=""
+            TEMP_ISSUES_FILE="/tmp/new_issues.json"
+            echo "$NEW_ISSUES" > "$TEMP_ISSUES_FILE"
             
-            echo "$NEW_ISSUES" | jq -c '.[]' | while IFS= read -r issue; do
-              ISSUE_TITLE=$(echo "$issue" | jq -r '.title')
-              ISSUE_BODY=$(echo "$issue" | jq -r '.body // ""')
-              ISSUE_URL=$(echo "$issue" | jq -r '.html_url')
-              ISSUE_NUMBER=$(echo "$issue" | jq -r '.number')
+            # Process each issue
+            for i in $(seq 0 $((NEW_ISSUE_COUNT - 1))); do
+              ISSUE=$(jq -r ".[$i]" "$TEMP_ISSUES_FILE")
+              ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
+              ISSUE_BODY=$(echo "$ISSUE" | jq -r '.body // ""')
+              ISSUE_URL=$(echo "$ISSUE" | jq -r '.html_url')
+              ISSUE_NUMBER=$(echo "$ISSUE" | jq -r '.number')
               
               # Parse the issue body for internship details
               COMPANY="Unknown"
@@ -206,29 +222,32 @@ jobs:
               SPONSORSHIP="Not specified"
               SEASON="Summer"
               
+              # Save issue body to temp file for easier parsing
+              echo "$ISSUE_BODY" > /tmp/issue_body.txt
+              
               # Extract Company Name
-              if echo "$ISSUE_BODY" | grep -q "Company Name"; then
-                COMPANY=$(echo "$ISSUE_BODY" | sed -n '/Company Name/,/\*\*/p' | tail -n 1 | sed 's/\*\*//g' | xargs)
+              if grep -q "Company Name" /tmp/issue_body.txt; then
+                COMPANY=$(sed -n '/Company Name/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
               fi
               
               # Extract Internship Title
-              if echo "$ISSUE_BODY" | grep -q "Internship Title"; then
-                ROLE=$(echo "$ISSUE_BODY" | sed -n '/Internship Title/,/\*\*/p' | tail -n 1 | sed 's/\*\*//g' | xargs)
+              if grep -q "Internship Title" /tmp/issue_body.txt; then
+                ROLE=$(sed -n '/Internship Title/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
               fi
               
               # Extract Location
-              if echo "$ISSUE_BODY" | grep -q "Location"; then
-                LOCATION=$(echo "$ISSUE_BODY" | sed -n '/Location/,/\*\*/p' | tail -n 1 | sed 's/\*\*//g' | xargs)
+              if grep -q "Location" /tmp/issue_body.txt; then
+                LOCATION=$(sed -n '/\*\*Location\*\*/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | grep -v "Location" | head -n 1 | sed 's/\*\*//g' | xargs)
               fi
               
               # Extract Link
-              if echo "$ISSUE_BODY" | grep -q "Link to Internship Posting"; then
-                LINK=$(echo "$ISSUE_BODY" | sed -n '/Link to Internship Posting/,/^$/p' | grep -E '^https?://' | head -n 1 | xargs)
+              if grep -q "Link to Internship Posting" /tmp/issue_body.txt; then
+                LINK=$(sed -n '/Link to Internship Posting/,/^\*\*/p' /tmp/issue_body.txt | grep -E '^https?://' | head -n 1 | xargs)
               fi
               
               # Extract Sponsorship info
-              if echo "$ISSUE_BODY" | grep -q "sponsorship"; then
-                SPONSORSHIP=$(echo "$ISSUE_BODY" | sed -n '/sponsorship/,/\*\*/p' | tail -n 1 | sed 's/\*\*//g' | xargs)
+              if grep -q "sponsorship" /tmp/issue_body.txt; then
+                SPONSORSHIP=$(sed -n '/sponsorship/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
               fi
               
               # Format for Discord

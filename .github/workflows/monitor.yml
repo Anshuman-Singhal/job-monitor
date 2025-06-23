@@ -184,15 +184,22 @@ jobs:
             exit 1
           fi
           
-          # Read previously tracked issues
-          TRACKED_ISSUES=$(cat "$TRACKING_FILE")
+          # Save current issues to temp file
+          echo "$ISSUES_RESPONSE" | jq '[.[] | select(.pull_request == null)]' > /tmp/current_issues.json
           
-          # Find new issues
-          NEW_ISSUES=$(echo "$ISSUES_RESPONSE" | jq -r --argjson tracked "$TRACKED_ISSUES" '
-            [.[] | select(.pull_request == null) | select(.number as $num | ($tracked | map(.number) | index($num)) == null)]
-          ')
+          # Get tracked issue numbers
+          TRACKED_NUMBERS=$(cat "$TRACKING_FILE" | jq -r '.[].number' | sort -n)
+          CURRENT_NUMBERS=$(cat /tmp/current_issues.json | jq -r '.[].number' | sort -n)
           
-          NEW_ISSUE_COUNT=$(echo "$NEW_ISSUES" | jq 'length')
+          # Find new issue numbers
+          NEW_NUMBERS=$(comm -13 <(echo "$TRACKED_NUMBERS") <(echo "$CURRENT_NUMBERS"))
+          
+          # Count new issues
+          if [ -z "$NEW_NUMBERS" ]; then
+            NEW_ISSUE_COUNT=0
+          else
+            NEW_ISSUE_COUNT=$(echo "$NEW_NUMBERS" | wc -l)
+          fi
           
           echo "Found $NEW_ISSUE_COUNT new issues"
           
@@ -203,65 +210,71 @@ jobs:
             
             # Format new issues for Discord
             FORMATTED_ISSUES=""
-            TEMP_ISSUES_FILE="/tmp/new_issues.json"
-            echo "$NEW_ISSUES" > "$TEMP_ISSUES_FILE"
             
-            # Process each issue
-            for i in $(seq 0 $((NEW_ISSUE_COUNT - 1))); do
-              ISSUE=$(jq -r ".[$i]" "$TEMP_ISSUES_FILE")
-              ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
-              ISSUE_BODY=$(echo "$ISSUE" | jq -r '.body // ""')
-              ISSUE_URL=$(echo "$ISSUE" | jq -r '.html_url')
-              ISSUE_NUMBER=$(echo "$ISSUE" | jq -r '.number')
+            # Process each new issue number
+            for ISSUE_NUM in $NEW_NUMBERS; do
+              # Get the specific issue data
+              ISSUE=$(cat /tmp/current_issues.json | jq -r ".[] | select(.number == $ISSUE_NUM)")
               
-              # Parse the issue body for internship details
-              COMPANY="Unknown"
-              ROLE="Unknown"
-              LOCATION="Unknown"
-              LINK=""
-              SPONSORSHIP="Not specified"
-              SEASON="Summer"
-              
-              # Save issue body to temp file for easier parsing
-              echo "$ISSUE_BODY" > /tmp/issue_body.txt
-              
-              # Extract Company Name
-              if grep -q "Company Name" /tmp/issue_body.txt; then
-                COMPANY=$(sed -n '/Company Name/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
-              fi
-              
-              # Extract Internship Title
-              if grep -q "Internship Title" /tmp/issue_body.txt; then
-                ROLE=$(sed -n '/Internship Title/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
-              fi
-              
-              # Extract Location
-              if grep -q "Location" /tmp/issue_body.txt; then
-                LOCATION=$(sed -n '/\*\*Location\*\*/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | grep -v "Location" | head -n 1 | sed 's/\*\*//g' | xargs)
-              fi
-              
-              # Extract Link
-              if grep -q "Link to Internship Posting" /tmp/issue_body.txt; then
-                LINK=$(sed -n '/Link to Internship Posting/,/^\*\*/p' /tmp/issue_body.txt | grep -E '^https?://' | head -n 1 | xargs)
-              fi
-              
-              # Extract Sponsorship info
-              if grep -q "sponsorship" /tmp/issue_body.txt; then
-                SPONSORSHIP=$(sed -n '/sponsorship/,/^\*\*.*\*\*$/p' /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
-              fi
-              
-              # Format for Discord
-              ISSUE_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
-              if [ -n "$LINK" ]; then
-                ISSUE_ENTRY="$ISSUE_ENTRY\n🔗 [Apply Here]($LINK)"
-              fi
-              ISSUE_ENTRY="$ISSUE_ENTRY\n🎫 Sponsorship: $SPONSORSHIP"
-              ISSUE_ENTRY="$ISSUE_ENTRY\n💬 [View Issue #$ISSUE_NUMBER]($ISSUE_URL)"
-              
-              if [ -z "$FORMATTED_ISSUES" ]; then
-                FORMATTED_ISSUES="$ISSUE_ENTRY"
-              else
-                FORMATTED_ISSUES="$FORMATTED_ISSUES\n\n$ISSUE_ENTRY"
+              if [ -n "$ISSUE" ]; then
+                ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
+                ISSUE_BODY=$(echo "$ISSUE" | jq -r '.body // ""')
+                ISSUE_URL=$(echo "$ISSUE" | jq -r '.html_url')
+                ISSUE_NUMBER=$(echo "$ISSUE" | jq -r '.number')
+                
+                # Parse the issue body for internship details
+                COMPANY="Unknown"
+                ROLE="Unknown"
+                LOCATION="Unknown"
+                LINK=""
+                SPONSORSHIP="Not specified"
+                
+                # Save issue body to temp file for easier parsing
+                echo "$ISSUE_BODY" > /tmp/issue_body.txt
+                
+                # Extract Company Name
+                if grep -q "Company Name" /tmp/issue_body.txt; then
+                  COMPANY=$(grep -A1 "Company Name" /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
+                fi
+                
+                # Extract Internship Title
+                if grep -q "Internship Title" /tmp/issue_body.txt; then
+                  ROLE=$(grep -A1 "Internship Title" /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
+                fi
+                
+                # Extract Location
+                if grep -q "\*\*Location\*\*" /tmp/issue_body.txt; then
+                  LOCATION=$(grep -A1 "\*\*Location\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                fi
+                
+                # Extract Link
+                if grep -q "Link to Internship Posting" /tmp/issue_body.txt; then
+                  LINK=$(grep -A2 "Link to Internship Posting" /tmp/issue_body.txt | grep -E '^https?://' | head -n 1 | xargs)
+                fi
+                
+                # Extract Sponsorship info
+                if grep -qi "sponsorship" /tmp/issue_body.txt; then
+                  SPONSORSHIP=$(grep -A1 -i "sponsorship" /tmp/issue_body.txt | tail -n 1 | xargs)
+                fi
+                
+                # Clean up extracted values
+                [ "$COMPANY" = "Company Name" ] && COMPANY="Unknown"
+                [ "$ROLE" = "Internship Title" ] && ROLE="Unknown"
+                [ "$LOCATION" = "Location" ] && LOCATION="Unknown"
+                
+                # Format for Discord
+                ISSUE_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
+                if [ -n "$LINK" ] && [ "$LINK" != "" ]; then
+                  ISSUE_ENTRY="$ISSUE_ENTRY\n🔗 [Apply Here]($LINK)"
+                fi
+                ISSUE_ENTRY="$ISSUE_ENTRY\n🎫 Sponsorship: $SPONSORSHIP"
+                ISSUE_ENTRY="$ISSUE_ENTRY\n💬 [View Issue #$ISSUE_NUMBER]($ISSUE_URL)"
+                
+                if [ -z "$FORMATTED_ISSUES" ]; then
+                  FORMATTED_ISSUES="$ISSUE_ENTRY"
+                else
+                  FORMATTED_ISSUES="$FORMATTED_ISSUES\n\n$ISSUE_ENTRY"
+                fi
               fi
             done
             
@@ -270,7 +283,7 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
             
             # Update tracking file with all current issues
-            echo "$ISSUES_RESPONSE" | jq '[.[] | select(.pull_request == null) | {number: .number, title: .title}]' > "$TRACKING_FILE"
+            cat /tmp/current_issues.json | jq '[.[] | {number: .number, title: .title}]' > "$TRACKING_FILE"
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi

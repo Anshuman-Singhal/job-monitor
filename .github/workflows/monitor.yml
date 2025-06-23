@@ -233,13 +233,13 @@ jobs:
                 echo "$ISSUE_BODY" > /tmp/issue_body.txt
                 
                 # Extract Company Name
-                if grep -q "Company Name" /tmp/issue_body.txt; then
-                  COMPANY=$(grep -A1 "Company Name" /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
+                if grep -q "\*\*Company Name\*\*" /tmp/issue_body.txt; then
+                  COMPANY=$(grep -A1 "\*\*Company Name\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
                 fi
                 
                 # Extract Internship Title
-                if grep -q "Internship Title" /tmp/issue_body.txt; then
-                  ROLE=$(grep -A1 "Internship Title" /tmp/issue_body.txt | tail -n 1 | sed 's/\*\*//g' | xargs)
+                if grep -q "\*\*Internship Title\*\*" /tmp/issue_body.txt; then
+                  ROLE=$(grep -A1 "\*\*Internship Title\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
                 fi
                 
                 # Extract Location
@@ -248,19 +248,38 @@ jobs:
                 fi
                 
                 # Extract Link
-                if grep -q "Link to Internship Posting" /tmp/issue_body.txt; then
-                  LINK=$(grep -A2 "Link to Internship Posting" /tmp/issue_body.txt | grep -E '^https?://' | head -n 1 | xargs)
+                if grep -q "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt; then
+                  LINK=$(grep -A1 "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
                 fi
                 
-                # Extract Sponsorship info
-                if grep -qi "sponsorship" /tmp/issue_body.txt; then
-                  SPONSORSHIP=$(grep -A1 -i "sponsorship" /tmp/issue_body.txt | tail -n 1 | xargs)
+                # Extract Sponsorship info - looking for the sponsorship question
+                if grep -q "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt; then
+                  SPONSORSHIP=$(grep -A1 "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
                 fi
                 
-                # Clean up extracted values
-                [ "$COMPANY" = "Company Name" ] && COMPANY="Unknown"
-                [ "$ROLE" = "Internship Title" ] && ROLE="Unknown"
-                [ "$LOCATION" = "Location" ] && LOCATION="Unknown"
+                # Extract Season
+                if grep -q "\*\*What season is this internship for?\*\*" /tmp/issue_body.txt; then
+                  SEASON=$(grep -A1 "\*\*What season is this internship for?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                fi
+                
+                # Extract Application Status
+                if grep -q "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt; then
+                  APP_STATUS=$(grep -A1 "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                fi
+                
+                # Clean up extracted values - remove any remaining asterisks
+                COMPANY=$(echo "$COMPANY" | sed 's/\*//g')
+                ROLE=$(echo "$ROLE" | sed 's/\*//g')
+                LOCATION=$(echo "$LOCATION" | sed 's/\*//g')
+                SPONSORSHIP=$(echo "$SPONSORSHIP" | sed 's/\*//g')
+                
+                # Set defaults if empty
+                [ -z "$COMPANY" ] && COMPANY="Unknown"
+                [ -z "$ROLE" ] && ROLE="Unknown"
+                [ -z "$LOCATION" ] && LOCATION="Unknown"
+                [ -z "$SPONSORSHIP" ] && SPONSORSHIP="Not specified"
+                [ -z "$SEASON" ] && SEASON="Not specified"
+                [ -z "$APP_STATUS" ] && APP_STATUS="Unknown"
                 
                 # Format for Discord
                 ISSUE_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
@@ -268,6 +287,8 @@ jobs:
                   ISSUE_ENTRY="$ISSUE_ENTRY\n🔗 [Apply Here]($LINK)"
                 fi
                 ISSUE_ENTRY="$ISSUE_ENTRY\n🎫 Sponsorship: $SPONSORSHIP"
+                ISSUE_ENTRY="$ISSUE_ENTRY\n📅 Season: $SEASON"
+                ISSUE_ENTRY="$ISSUE_ENTRY\n✅ Status: $APP_STATUS"
                 ISSUE_ENTRY="$ISSUE_ENTRY\n💬 [View Issue #$ISSUE_NUMBER]($ISSUE_URL)"
                 
                 if [ -z "$FORMATTED_ISSUES" ]; then

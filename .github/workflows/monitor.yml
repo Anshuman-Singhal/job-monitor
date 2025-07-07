@@ -351,7 +351,7 @@ jobs:
                    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
                  }]
                }' \
-               "${{ secrets.DISCORD_WEBHOOK_URL }}"
+               "${{ secrets.DISCORD_PM_WEBHOOK_URL }}"
       
       - name: Send Discord Notification for VanshB03 Issues
         if: steps.check-vansh-issues.outputs.changed == 'true'
@@ -383,7 +383,7 @@ jobs:
                    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
                  }]
                }' \
-               "${{ secrets.DISCORD_WEBHOOK_URL }}"
+               "${{ secrets.DISCORD_INTERNSHIP_WEBHOOK_URL }}"
       
       - name: Commit tracking files
         if: steps.check-jobright.outputs.changed == 'true' || steps.check-vansh-issues.outputs.changed == 'true'

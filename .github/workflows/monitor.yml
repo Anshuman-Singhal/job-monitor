@@ -20,6 +20,7 @@ jobs:
         run: |
           mkdir -p .tracking
           touch .tracking/jobright-ai.sha
+          touch .tracking/jobright-consulting.sha
           touch .tracking/vanshb03-issues.json
       
       - name: Check JobRight AI Repository
@@ -144,6 +145,140 @@ jobs:
             if [ "$FOUND_NEW_LISTINGS" = true ]; then
               echo "changed=true" >> $GITHUB_OUTPUT
               echo "repo_name=JobRight AI - Product Management Internship" >> $GITHUB_OUTPUT
+              echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
+              echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+            fi
+            
+            # Always save new SHA (even if no new listings)
+            echo "$CURRENT_SHA" > "$LAST_SHA_FILE"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check JobRight Consulting Repository
+        id: check-consulting
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="jobright-ai/2025-Consultant-Internship"
+          LAST_SHA_FILE=".tracking/jobright-consulting.sha"
+          
+          # First, get the default branch
+          REPO_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO")
+          DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch // "main"')
+          
+          echo "Default branch: $DEFAULT_BRANCH"
+          
+          # Get current SHA using the default branch
+          API_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/commits?sha=$DEFAULT_BRANCH&per_page=1")
+          
+          # Check if response is an array (success) or object (error)
+          if echo "$API_RESPONSE" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            CURRENT_SHA=$(echo "$API_RESPONSE" | jq -r '.[0].sha // empty')
+            COMMIT_MSG=$(echo "$API_RESPONSE" | jq -r '.[0].commit.message // "No message"' | head -n 1)
+          else
+            echo "GitHub API error or rate limit:"
+            echo "$API_RESPONSE" | jq '.'
+            echo "Attempting alternative method..."
+            
+            # Try alternative endpoint
+            ALT_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/branches/$DEFAULT_BRANCH")
+            CURRENT_SHA=$(echo "$ALT_RESPONSE" | jq -r '.commit.sha // empty')
+            COMMIT_MSG=$(echo "$ALT_RESPONSE" | jq -r '.commit.commit.message // "No message"' | head -n 1)
+          fi
+          
+          if [ -z "$CURRENT_SHA" ]; then
+            echo "Failed to fetch current SHA"
+            exit 1
+          fi
+          
+          # Read last known SHA
+          LAST_SHA=$(cat "$LAST_SHA_FILE" 2>/dev/null || echo "")
+          
+          echo "Current SHA: $CURRENT_SHA"
+          echo "Last SHA: $LAST_SHA"
+          
+          if [ "$CURRENT_SHA" != "$LAST_SHA" ]; then
+            # Get the diff between commits to extract new listings
+            FOUND_NEW_LISTINGS=false
+            
+            if [ -n "$LAST_SHA" ]; then
+              DIFF_URL="https://api.github.com/repos/$REPO/compare/$LAST_SHA...$CURRENT_SHA"
+              DIFF_RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$DIFF_URL")
+              
+              # Extract added lines from README
+              PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
+              
+              if [ -n "$PATCH" ]; then
+                # Check if there are actual new job listings (table rows with company info)
+                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_lines_consulting.txt
+                
+                # Check if any of the new lines are actual job postings (not just headers or formatting)
+                while IFS= read -r line; do
+                  if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    # Skip header rows and separator rows
+                    if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
+                      FOUND_NEW_LISTINGS=true
+                      break
+                    fi
+                  fi
+                done < /tmp/new_lines_consulting.txt
+                
+                # Format listings for Discord only if we found actual job postings
+                if [ "$FOUND_NEW_LISTINGS" = true ]; then
+                  LISTINGS=""
+                  while IFS= read -r line; do
+                    # Parse table row - assuming format: | Company | Role | Location | Link | Date |
+                    if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
+                      COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                      ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
+                      LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
+                      LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
+                      DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
+                      
+                      # Extract URL from markdown link if present
+                      if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
+                        URL=$(echo "$LINK" | sed -n 's/.*](\(.*\)).*/\1/p')
+                        LINK_TEXT=$(echo "$LINK" | sed -n 's/\[\(.*\)\].*/\1/p')
+                      else
+                        URL=""
+                        LINK_TEXT="$LINK"
+                      fi
+                      
+                      if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
+                        LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
+                        if [ -n "$URL" ]; then
+                          LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
+                        fi
+                        if [ -n "$DATE" ] && [ "$DATE" != "Date Posted" ]; then
+                          LISTING_ENTRY="$LISTING_ENTRY\n📅 Posted: $DATE"
+                        fi
+                        LISTINGS="$LISTINGS\n\n$LISTING_ENTRY"
+                      fi
+                    fi
+                  done < /tmp/new_lines_consulting.txt
+                  
+                  echo "listings<<EOF" >> $GITHUB_OUTPUT
+                  echo -e "$LISTINGS" >> $GITHUB_OUTPUT
+                  echo "EOF" >> $GITHUB_OUTPUT
+                else
+                  echo "listings=README updated but no new job listings added" >> $GITHUB_OUTPUT
+                fi
+              else
+                echo "listings=No README changes detected" >> $GITHUB_OUTPUT
+              fi
+            else
+              # First run - check if there are any listings at all
+              FOUND_NEW_LISTINGS=true
+              echo "listings=Initial tracking - monitoring started" >> $GITHUB_OUTPUT
+            fi
+            
+            if [ "$FOUND_NEW_LISTINGS" = true ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "repo_name=JobRight AI - Consulting Internship" >> $GITHUB_OUTPUT
               echo "repo_url=https://github.com/$REPO" >> $GITHUB_OUTPUT
               echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
             else
@@ -353,6 +488,50 @@ jobs:
                }' \
                "${{ secrets.DISCORD_WEBHOOK_URL }}"
       
+      - name: Send Discord Notification for Consulting
+        if: steps.check-consulting.outputs.changed == 'true'
+        env:
+          LISTINGS: ${{ steps.check-consulting.outputs.listings }}
+        run: |
+          # Prepare the Discord message with extracted listings
+          if [ "$LISTINGS" != "README updated but no new job listings added" ] && [ "$LISTINGS" != "No README changes detected" ] && [ "$LISTINGS" != "Initial tracking - monitoring started" ]; then
+            # Convert newlines for JSON
+            FORMATTED_LISTINGS=$(echo "$LISTINGS" | sed ':a;N;$!ba;s/\n/\\n/g')
+            DESCRIPTION="**New Consulting Internship Postings Added:**\\n$FORMATTED_LISTINGS"
+          else
+            # Skip notification if no actual job listings were added
+            echo "Skipping notification - no new job listings"
+            exit 0
+          fi
+          
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d '{
+                 "content": "@everyone",
+                 "embeds": [{
+                   "title": "💼 New Consulting Internships",
+                   "description": "'"$DESCRIPTION"'",
+                   "color": 10181046,
+                   "fields": [
+                     {
+                       "name": "📚 Repository",
+                       "value": "[View All Listings](${{ steps.check-consulting.outputs.repo_url }})",
+                       "inline": true
+                     },
+                     {
+                       "name": "💬 Commit",
+                       "value": "${{ steps.check-consulting.outputs.commit_message }}",
+                       "inline": true
+                     }
+                   ],
+                   "footer": {
+                     "text": "JobRight AI • Consulting Internships"
+                   },
+                   "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+                 }]
+               }' \
+               "${{ secrets.DISCORD_WEBHOOK_URL_CONSULTING_BOT }}"
+      
       - name: Send Discord Notification for VanshB03 Issues
         if: steps.check-vansh-issues.outputs.changed == 'true'
         env:
@@ -386,7 +565,7 @@ jobs:
                "${{ secrets.DISCORD_WEBHOOK_URL_TECH_BOT }}"
       
       - name: Commit tracking files
-        if: steps.check-jobright.outputs.changed == 'true' || steps.check-vansh-issues.outputs.changed == 'true'
+        if: steps.check-jobright.outputs.changed == 'true' || steps.check-consulting.outputs.changed == 'true' || steps.check-vansh-issues.outputs.changed == 'true'
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'

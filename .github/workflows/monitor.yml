@@ -78,8 +78,18 @@ jobs:
               PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
               
               if [ -n "$PATCH" ]; then
-                # Check if there are actual new job listings (table rows with company info)
-                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_lines.txt
+                # Extract both added and removed lines to compare
+                echo "$PATCH" | grep '^-' | grep -E '\|.*\|.*\|.*\|' | sed 's/^-//' > /tmp/removed_lines.txt
+                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/added_lines.txt
+                
+                # Find truly new listings (added but not in removed)
+                > /tmp/new_lines.txt
+                while IFS= read -r line; do
+                  # Skip if this line was also in removed (meaning it was moved/reformatted)
+                  if ! grep -Fq "$line" /tmp/removed_lines.txt; then
+                    echo "$line" >> /tmp/new_lines.txt
+                  fi
+                done < /tmp/added_lines.txt
                 
                 # Check if any of the new lines are actual job postings (not just headers or formatting)
                 while IFS= read -r line; do
@@ -87,8 +97,11 @@ jobs:
                     COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
                     # Skip header rows and separator rows
                     if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
-                      FOUND_NEW_LISTINGS=true
-                      break
+                      # Additional check: ensure this is a real company name
+                      if [[ ${#COMPANY} -gt 2 ]] && [[ ! "$COMPANY" =~ ^[[:space:]]*$ ]]; then
+                        FOUND_NEW_LISTINGS=true
+                        break
+                      fi
                     fi
                   fi
                 done < /tmp/new_lines.txt
@@ -114,7 +127,7 @@ jobs:
                         LINK_TEXT="$LINK"
                       fi
                       
-                      if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
+                      if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]] && [[ ${#COMPANY} -gt 2 ]]; then
                         LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
                         if [ -n "$URL" ]; then
                           LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"
@@ -212,8 +225,18 @@ jobs:
               PATCH=$(echo "$DIFF_RESPONSE" | jq -r '.files[] | select(.filename == "README.md") | .patch // empty')
               
               if [ -n "$PATCH" ]; then
-                # Check if there are actual new job listings (table rows with company info)
-                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/new_lines_consulting.txt
+                # Extract both added and removed lines to compare
+                echo "$PATCH" | grep '^-' | grep -E '\|.*\|.*\|.*\|' | sed 's/^-//' > /tmp/removed_lines_consulting.txt
+                echo "$PATCH" | grep '^+' | grep -E '\|.*\|.*\|.*\|' | sed 's/^+//' > /tmp/added_lines_consulting.txt
+                
+                # Find truly new listings (added but not in removed)
+                > /tmp/new_lines_consulting.txt
+                while IFS= read -r line; do
+                  # Skip if this line was also in removed (meaning it was moved/reformatted)
+                  if ! grep -Fq "$line" /tmp/removed_lines_consulting.txt; then
+                    echo "$line" >> /tmp/new_lines_consulting.txt
+                  fi
+                done < /tmp/added_lines_consulting.txt
                 
                 # Check if any of the new lines are actual job postings (not just headers or formatting)
                 while IFS= read -r line; do
@@ -221,8 +244,11 @@ jobs:
                     COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
                     # Skip header rows and separator rows
                     if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
-                      FOUND_NEW_LISTINGS=true
-                      break
+                      # Additional check: ensure this is a real company name
+                      if [[ ${#COMPANY} -gt 2 ]] && [[ ! "$COMPANY" =~ ^[[:space:]]*$ ]]; then
+                        FOUND_NEW_LISTINGS=true
+                        break
+                      fi
                     fi
                   fi
                 done < /tmp/new_lines_consulting.txt
@@ -248,7 +274,7 @@ jobs:
                         LINK_TEXT="$LINK"
                       fi
                       
-                      if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
+                      if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]] && [[ ${#COMPANY} -gt 2 ]]; then
                         LISTING_ENTRY="**$COMPANY** - $ROLE\n📍 $LOCATION"
                         if [ -n "$URL" ]; then
                           LISTING_ENTRY="$LISTING_ENTRY\n🔗 [Apply Here]($URL)"

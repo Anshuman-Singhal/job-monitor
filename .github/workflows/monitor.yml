@@ -94,7 +94,7 @@ jobs:
                 # Check if any of the new lines are actual job postings (not just headers or formatting)
                 while IFS= read -r line; do
                   if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                     # Skip header rows and separator rows
                     if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
                       # Additional check: ensure this is a real company name
@@ -112,11 +112,11 @@ jobs:
                   while IFS= read -r line; do
                     # Parse table row - assuming format: | Company | Role | Location | Link | Date |
                     if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                      COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
-                      ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
-                      LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
-                      LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
-                      DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
+                      COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
+                      ROLE=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
+                      LOCATION=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
+                      LINK=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
+                      DATE=$(echo "$line" | cut -d'|' -f6 | sed 's/^ *//;s/ *$//')
                       
                       # Extract URL from markdown link if present
                       if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
@@ -241,7 +241,7 @@ jobs:
                 # Check if any of the new lines are actual job postings (not just headers or formatting)
                 while IFS= read -r line; do
                   if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                    COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
+                    COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
                     # Skip header rows and separator rows
                     if [ -n "$COMPANY" ] && [ "$COMPANY" != "Company" ] && [ "$COMPANY" != "---" ] && [[ ! "$COMPANY" =~ ^-+$ ]]; then
                       # Additional check: ensure this is a real company name
@@ -259,11 +259,11 @@ jobs:
                   while IFS= read -r line; do
                     # Parse table row - assuming format: | Company | Role | Location | Link | Date |
                     if echo "$line" | grep -qE '^\|[^|]+\|[^|]+\|[^|]+\|'; then
-                      COMPANY=$(echo "$line" | cut -d'|' -f2 | xargs)
-                      ROLE=$(echo "$line" | cut -d'|' -f3 | xargs)
-                      LOCATION=$(echo "$line" | cut -d'|' -f4 | xargs)
-                      LINK=$(echo "$line" | cut -d'|' -f5 | xargs)
-                      DATE=$(echo "$line" | cut -d'|' -f6 | xargs)
+                      COMPANY=$(echo "$line" | cut -d'|' -f2 | sed 's/^ *//;s/ *$//')
+                      ROLE=$(echo "$line" | cut -d'|' -f3 | sed 's/^ *//;s/ *$//')
+                      LOCATION=$(echo "$line" | cut -d'|' -f4 | sed 's/^ *//;s/ *$//')
+                      LINK=$(echo "$line" | cut -d'|' -f5 | sed 's/^ *//;s/ *$//')
+                      DATE=$(echo "$line" | cut -d'|' -f6 | sed 's/^ *//;s/ *$//')
                       
                       # Extract URL from markdown link if present
                       if echo "$LINK" | grep -q '\[.*\](.*)'  2>/dev/null; then
@@ -395,37 +395,37 @@ jobs:
                 
                 # Extract Company Name
                 if grep -q "\*\*Company Name\*\*" /tmp/issue_body.txt; then
-                  COMPANY=$(grep -A1 "\*\*Company Name\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  COMPANY=$(grep -A1 "\*\*Company Name\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Internship Title
                 if grep -q "\*\*Internship Title\*\*" /tmp/issue_body.txt; then
-                  ROLE=$(grep -A1 "\*\*Internship Title\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  ROLE=$(grep -A1 "\*\*Internship Title\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Location
                 if grep -q "\*\*Location\*\*" /tmp/issue_body.txt; then
-                  LOCATION=$(grep -A1 "\*\*Location\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  LOCATION=$(grep -A1 "\*\*Location\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Link
                 if grep -q "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt; then
-                  LINK=$(grep -A1 "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  LINK=$(grep -A1 "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Sponsorship info - looking for the sponsorship question
                 if grep -q "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt; then
-                  SPONSORSHIP=$(grep -A1 "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  SPONSORSHIP=$(grep -A1 "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Season
                 if grep -q "\*\*What season is this internship for?\*\*" /tmp/issue_body.txt; then
-                  SEASON=$(grep -A1 "\*\*What season is this internship for?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  SEASON=$(grep -A1 "\*\*What season is this internship for?\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Extract Application Status
                 if grep -q "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt; then
-                  APP_STATUS=$(grep -A1 "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt | tail -n 1 | xargs)
+                  APP_STATUS=$(grep -A1 "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
                 # Clean up extracted values - remove any remaining asterisks

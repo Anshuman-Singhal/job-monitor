@@ -28,7 +28,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          REPO="jobright-ai/2025-Product-Management-Internship"
+          REPO="jobright-ai/2026-Product-Management-Internship"
           LAST_SHA_FILE=".tracking/jobright-ai.sha"
           
           # First, get the default branch
@@ -175,7 +175,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          REPO="jobright-ai/2025-Consultant-Internship"
+          REPO="jobright-ai/2026-Consultant-Internship"
           LAST_SHA_FILE=".tracking/jobright-consulting.sha"
           
           # First, get the default branch

@@ -322,7 +322,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          REPO="vanshb03/Summer2026-Internships"
+          # UPDATE: Changed repository name from Summer2026-Internships to Summer2027-Internships
+          REPO="vanshb03/Summer2027-Internships"
           TRACKING_FILE=".tracking/vanshb03-issues.json"
           
           # Initialize tracking file if it doesn't exist
@@ -366,7 +367,7 @@ jobs:
           
           if [ "$NEW_ISSUE_COUNT" -gt 0 ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "repo_name=VanshB03 - Summer 2026 Internships" >> $GITHUB_OUTPUT
+            echo "repo_name=VanshB03 - Summer 2026/2027 Internships" >> $GITHUB_OUTPUT
             echo "repo_url=https://github.com/$REPO/issues" >> $GITHUB_OUTPUT
             
             # Format new issues for Discord
@@ -413,7 +414,7 @@ jobs:
                   LINK=$(grep -A1 "\*\*Link to Internship Posting\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
-                # Extract Sponsorship info - looking for the sponsorship question
+                # Extract Sponsorship info
                 if grep -q "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt; then
                   SPONSORSHIP=$(grep -A1 "\*\*Does this internship offer sponsorship?\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
@@ -428,7 +429,7 @@ jobs:
                   APP_STATUS=$(grep -A1 "\*\*Is this internship currently accepting applications?\*\*" /tmp/issue_body.txt | tail -n 1 | sed 's/^ *//;s/ *$//')
                 fi
                 
-                # Clean up extracted values - remove any remaining asterisks
+                # Clean up extracted values
                 COMPANY=$(echo "$COMPANY" | sed 's/\*//g')
                 ROLE=$(echo "$ROLE" | sed 's/\*//g')
                 LOCATION=$(echo "$LOCATION" | sed 's/\*//g')
